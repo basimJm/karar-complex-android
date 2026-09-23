@@ -8,11 +8,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -23,12 +26,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import coil.compose.rememberAsyncImagePainter
 import com.alkadad.compound.data.model.*
 import com.alkadad.compound.data.repository.RowRepository
@@ -41,7 +46,7 @@ import java.io.File
 
 private const val DEBOUNCE_MS = 1000L
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TableDetailScreen(
     tableId: String,
@@ -68,6 +73,9 @@ fun TableDetailScreen(
     var pendingDeleteRowId by remember { mutableStateOf("") }
     var showDetailDialog by remember { mutableStateOf(false) }
     var selectedRow by remember { mutableStateOf<Row?>(null) }
+    var showImageViewer by remember { mutableStateOf(false) }
+    var viewerImages by remember { mutableStateOf<List<Image>>(emptyList()) }
+    var viewerInitialPage by remember { mutableStateOf(0) }
 
     val imageUri = remember { mutableStateOf<Uri?>(null) }
 
@@ -250,6 +258,11 @@ fun TableDetailScreen(
                                 pendingDeleteImageIndex = idx
                                 pendingDeleteRowId = row.id
                                 showDeleteImageDialog = true
+                            },
+                            onImageClick = { images, idx ->
+                                viewerImages = images
+                                viewerInitialPage = idx
+                                showImageViewer = true
                             }
                         )
                     }
@@ -417,13 +430,46 @@ fun TableDetailScreen(
             }
         )
     }
+    // Image Viewer Full Screen
+    if (showImageViewer && viewerImages.isNotEmpty()) {
+        val pagerState = rememberPagerState(initialPage = viewerInitialPage, pageCount = { viewerImages.size })
+        Dialog(onDismissRequest = { showImageViewer = false }) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Image(
+                            painter = rememberAsyncImagePainter(model = viewerImages[page].url),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize().clickable { },
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+                IconButton(
+                    onClick = { showImageViewer = false },
+                    modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
+                }
+                Text(
+                    text = "${pagerState.currentPage + 1} / ${viewerImages.size}",
+                    color = Color.White,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    fontSize = 16.sp
+                )
+            }
+        }
+    }
 }
 
 @Composable
 fun RowCard(
     row: Row, table: Table?,
     onRowClick: () -> Unit,
-    onEdit: () -> Unit, onDelete: () -> Unit, onAddImages: () -> Unit, onDeleteImage: (Int) -> Unit
+    onEdit: () -> Unit, onDelete: () -> Unit, onAddImages: () -> Unit, onDeleteImage: (Int) -> Unit,
+    onImageClick: (List<Image>, Int) -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -461,7 +507,7 @@ fun RowCard(
                     row.images.take(3).forEachIndexed { idx, img ->
                         Image(
                             painter = rememberAsyncImagePainter(model = img.url), contentDescription = null,
-                            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)).clickable { onDeleteImage(idx) },
+                            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)).clickable { onImageClick(row.images, idx) },
                             contentScale = ContentScale.Crop
                         )
                     }
