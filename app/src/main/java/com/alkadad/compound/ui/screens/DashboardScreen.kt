@@ -83,7 +83,7 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "\u0645\u062c\u0645\u0639 \u0627\u0644\u0643\u062f\u0627\u062f \u0627\u0644\u0633\u0643\u0646\u064a",
+                                text = "مجمعات النداء السكنية",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )

@@ -76,6 +76,7 @@ fun TableDetailScreen(
     var showImageViewer by remember { mutableStateOf(false) }
     var viewerImages by remember { mutableStateOf<List<Image>>(emptyList()) }
     var viewerInitialPage by remember { mutableStateOf(0) }
+    var showImageSourceDialog by remember { mutableStateOf(false) }
 
     val imageUri = remember { mutableStateOf<Uri?>(null) }
 
@@ -218,20 +219,6 @@ fun TableDetailScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
-            table?.houseCardImage?.let { imageUrl ->
-                Card(modifier = Modifier.fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(16.dp)) {
-                    Column {
-                        Text(text = "\u0635\u0648\u0631\u0629 \u0628\u0637\u0627\u0642\u0629 \u0627\u0644\u0645\u0646\u0632\u0644", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold, color = Gray800)
-                        Image(
-                            painter = rememberAsyncImagePainter(model = imageUrl),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                }
-            }
-
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Primary)
@@ -253,7 +240,7 @@ fun TableDetailScreen(
                             onRowClick = { selectedRow = row; showDetailDialog = true },
                             onEdit = { editingRow = row; rowName = row.name; rowFormData = row.data ?: emptyMap(); showRowDialog = true },
                             onDelete = { scope.launch { rowRepository.deleteRow(tableId, row.id); refreshTable() } },
-                            onAddImages = { selectedRowForImages = row; showImageOptions = true; galleryLauncher.launch("image/*") },
+                            onAddImages = { selectedRowForImages = row; showImageSourceDialog = true },
                             onDeleteImage = { idx ->
                                 pendingDeleteImageIndex = idx
                                 pendingDeleteRowId = row.id
@@ -430,6 +417,51 @@ fun TableDetailScreen(
             }
         )
     }
+    // Image Source Chooser
+    if (showImageSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showImageSourceDialog = false; selectedRowForImages = null },
+            title = { Text("\u0625\u0636\u0627\u0641\u0629 \u0635\u0648\u0631\u0629", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            showImageSourceDialog = false
+                            showImageOptions = true
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                val tempFile = File(context.cacheDir, "temp_image.jpg")
+                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
+                                imageUri.value = uri
+                                cameraLauncher.launch(uri)
+                            } else {
+                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
+                        }.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CameraAlt, null, tint = Primary, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("\u0627\u0644\u0643\u0627\u0645\u064a\u0631\u0627", fontSize = 16.sp)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            showImageSourceDialog = false
+                            showImageOptions = true
+                            galleryLauncher.launch("image/*")
+                        }.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.PhotoLibrary, null, tint = Primary, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("\u0627\u0644\u0645\u062d\u0641\u0638\u0629", fontSize = 16.sp)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showImageSourceDialog = false; selectedRowForImages = null }) { Text("\u0625\u0644\u063a\u0627\u0621") } }
+        )
+    }
+
     // Image Viewer Full Screen
     if (showImageViewer && viewerImages.isNotEmpty()) {
         val pagerState = rememberPagerState(initialPage = viewerInitialPage, pageCount = { viewerImages.size })
