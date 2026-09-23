@@ -47,6 +47,48 @@ android {
     }
 }
 
+// 16KB page size alignment for Google Play compliance
+def buildToolsDir = android.sdkDirectory.getAbsolutePath() + "/build-tools/"
+task alignTo16KB {
+    dependsOn 'assembleRelease'
+    doLast {
+        def btDir = file(buildToolsDir)
+        def tools = btDir.listFiles().findAll { it.isDirectory() }.sort { it.name }.last()
+        def zipalign = new File(tools, "zipalign")
+        def apks = file("${buildDir}/outputs/apk/release").listFiles()?.findAll { it.name.endsWith(".apk") }
+        apks?.each { apk ->
+            def aligned = new File(apk.parent, apk.name.replace(".apk", "-16kb.apk"))
+            exec {
+                commandLine zipalign.absolutePath, "-f", "-P", "16", "4096", apk.absolutePath, aligned.absolutePath
+            }
+            apk.delete()
+            aligned.renameTo(apk)
+            println "Aligned: ${apk.name}"
+        }
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name == 'assembleDebug' || task.name == 'assembleRelease') {
+        task.doLast {
+            def suffix = task.name == 'assembleDebug' ? 'debug' : 'release'
+            def btDir = file(buildToolsDir)
+            def tools = btDir.listFiles().findAll { it.isDirectory() }.sort { it.name }.last()
+            def zipalign = new File(tools, "zipalign")
+            def apks = file("${buildDir}/outputs/apk/${suffix}").listFiles()?.findAll { it.name.endsWith(".apk") }
+            apks?.each { apk ->
+                def aligned = new File(apk.parent, apk.name.replace(".apk", "-16kb.apk"))
+                exec {
+                    commandLine zipalign.absolutePath, "-f", "-P", "16", "4096", apk.absolutePath, aligned.absolutePath
+                }
+                apk.delete()
+                aligned.renameTo(apk)
+                println "16KB Aligned: ${apk.name}"
+            }
+        }
+    }
+}
+
 dependencies {
     // Core
     implementation 'androidx.core:core-ktx:1.12.0'

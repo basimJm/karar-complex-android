@@ -26,15 +26,21 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.gestures.detectTransformGestures
 import coil.compose.rememberAsyncImagePainter
+import kotlin.math.roundToInt
 import com.alkadad.compound.data.model.*
 import com.alkadad.compound.data.repository.RowRepository
 import com.alkadad.compound.data.repository.TableRepository
@@ -465,6 +471,14 @@ fun TableDetailScreen(
     // Image Viewer Full Screen
     if (showImageViewer && viewerImages.isNotEmpty()) {
         val pagerState = rememberPagerState(initialPage = viewerInitialPage, pageCount = { viewerImages.size })
+        var scale by remember { mutableFloatStateOf(1f) }
+        var offset by remember { mutableStateOf(Offset.Zero) }
+
+        LaunchedEffect(pagerState.currentPage) {
+            scale = 1f
+            offset = Offset.Zero
+        }
+
         Dialog(onDismissRequest = { showImageViewer = false }) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                 HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
@@ -472,7 +486,23 @@ fun TableDetailScreen(
                         Image(
                             painter = rememberAsyncImagePainter(model = viewerImages[page].url),
                             contentDescription = null,
-                            modifier = Modifier.fillMaxSize().clickable { },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                    translationX = offset.x
+                                    translationY = offset.y
+                                }
+                                .pointerInput(page) {
+                                    detectTransformGestures { _, pan, zoom, _ ->
+                                        scale = (scale * zoom).coerceIn(0.5f, 5f)
+                                        offset = Offset(
+                                            x = offset.x + pan.x,
+                                            y = offset.y + pan.y
+                                        )
+                                    }
+                                },
                             contentScale = ContentScale.Fit
                         )
                     }
