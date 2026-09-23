@@ -429,7 +429,7 @@ fun TableDetailScreen(
             onDismissRequest = { showImageSourceDialog = false; selectedRowForImages = null },
             title = { Text("\u0625\u0636\u0627\u0641\u0629 \u0635\u0648\u0631\u0629", fontWeight = FontWeight.Bold) },
             text = {
-                Column {
+                Column(modifier = Modifier.fillMaxSize()) {
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable {
                             showImageSourceDialog = false
@@ -472,11 +472,9 @@ fun TableDetailScreen(
     if (showImageViewer && viewerImages.isNotEmpty()) {
         val pagerState = rememberPagerState(initialPage = viewerInitialPage, pageCount = { viewerImages.size })
         var scale by remember { mutableFloatStateOf(1f) }
-        var offset by remember { mutableStateOf(Offset.Zero) }
 
         LaunchedEffect(pagerState.currentPage) {
             scale = 1f
-            offset = Offset.Zero
         }
 
         Dialog(onDismissRequest = { showImageViewer = false }) {
@@ -491,16 +489,10 @@ fun TableDetailScreen(
                                 .graphicsLayer {
                                     scaleX = scale
                                     scaleY = scale
-                                    translationX = offset.x
-                                    translationY = offset.y
                                 }
                                 .pointerInput(page) {
-                                    detectTransformGestures { _, pan, zoom, _ ->
+                                    detectTransformGestures { _, _, zoom, _ ->
                                         scale = (scale * zoom).coerceIn(0.5f, 5f)
-                                        offset = Offset(
-                                            x = offset.x + pan.x,
-                                            y = offset.y + pan.y
-                                        )
                                     }
                                 },
                             contentScale = ContentScale.Fit
