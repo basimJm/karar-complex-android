@@ -49,7 +49,7 @@ class TokenManager(private val context: Context) {
 object ApiClient {
     // Emulator: http://10.0.2.2:5000/api/
     // Physical device: http://YOUR_IP:5000/api/
-    private const val BASE_URL = "http://192.168.0.247:5000/api/"
+    private const val BASE_URL = "https://karar-complex-backend.onrender.com/api/"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
