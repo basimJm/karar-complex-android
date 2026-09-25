@@ -2,14 +2,14 @@ package com.alkadad.compound.ui.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,17 +17,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import com.alkadad.compound.data.model.Table
 import com.alkadad.compound.data.repository.AuthRepository
 import com.alkadad.compound.data.repository.TableRepository
+import com.alkadad.compound.ui.components.BrandMark
+import com.alkadad.compound.ui.components.DialogIcon
+import com.alkadad.compound.ui.components.EmptyState
+import com.alkadad.compound.ui.components.LoadingState
 import com.alkadad.compound.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -61,36 +62,29 @@ fun DashboardScreen(
         loadTables()
     }
 
+    val colors = MaterialTheme.colorScheme
+    val header = LocalHeaderColors.current
+
     Scaffold(
+        containerColor = colors.background,
         topBar = {
             TopAppBar(
+                modifier = Modifier.headerBackground(),
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Gold),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "\u0645",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = White
-                            )
-                        }
+                        BrandMark(size = 40.dp)
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
                                 text = "مجمعات النداء السكنية",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "\u0646\u0638\u0627\u0645 \u0625\u062f\u0627\u0631\u0629 \u0627\u0644\u062c\u062f\u0627\u0648\u0644",
-                                fontSize = 10.sp,
-                                color = Color.White.copy(alpha = 0.8f)
+                                text = "نظام إدارة الجداول",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = header.content.copy(alpha = 0.75f)
                             )
                         }
                     }
@@ -102,73 +96,62 @@ fun DashboardScreen(
                             onLogout()
                         }
                     }) {
-                        Icon(Icons.Default.Logout, contentDescription = "\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062e\u0631\u0648\u062c")
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "تسجيل الخروج")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Primary,
-                    titleContentColor = White,
-                    actionIconContentColor = White
-                )
+                colors = headerTopAppBarColors()
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = { showCreateDialog = true },
-                containerColor = Gold,
-                contentColor = White
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "\u0625\u0636\u0627\u0641\u0629 \u062c\u062f\u0648\u0644")
-            }
+                containerColor = colors.secondary,
+                contentColor = colors.onSecondary,
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("جدول جديد", style = MaterialTheme.typography.labelLarge) }
+            )
         }
     ) { paddingValues ->
         if (isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = Primary)
-            }
+            LoadingState(modifier = Modifier.padding(paddingValues))
         } else if (tables.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.GridOn,
-                        contentDescription = null,
-                        modifier = Modifier.size(80.dp),
-                        tint = Gray300
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "\u0644\u0627 \u062a\u0648\u062c\u062f \u062c\u062f\u0627\u0648\u0644",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Gray600
-                    )
-                    Text(
-                        text = "\u0627\u0636\u063a\u0637 + \u0644\u0625\u0646\u0634\u0627\u0621 \u0623\u0648\u0644 \u062c\u062f\u0648\u0644",
-                        fontSize = 14.sp,
-                        color = Gray400
-                    )
-                }
-            }
+            EmptyState(
+                icon = Icons.Default.GridView,
+                title = "لا توجد جداول",
+                subtitle = "اضغط + لإنشاء أول جدول",
+                modifier = Modifier.padding(paddingValues)
+            )
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Adaptive(minSize = 160.dp),
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(paddingValues),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "الجداول",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = colors.onBackground,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Surface(color = colors.primaryContainer, shape = RoundedCornerShape(50)) {
+                            Text(
+                                text = "${tables.size}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = colors.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
                 items(tables) { table ->
                     TableCard(
                         table = table,
@@ -182,23 +165,26 @@ fun DashboardScreen(
     if (showCreateDialog) {
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
-            title = { Text(text = "\u0625\u0636\u0627\u0641\u0629 \u062c\u062f\u0648\u0644 \u062c\u062f\u064a\u062f", fontWeight = FontWeight.Bold) },
+            icon = { DialogIcon(Icons.Default.PostAdd, colors.primaryContainer, colors.onPrimaryContainer) },
+            title = { Text(text = "إضافة جدول جديد", style = MaterialTheme.typography.titleLarge) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = newTableName,
                         onValueChange = { newTableName = it },
-                        label = { Text("\u0627\u0633\u0645 \u0627\u0644\u062c\u062f\u0648\u0644") },
+                        label = { Text("اسم الجدول") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        shape = MaterialTheme.shapes.small
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = newTableDescription,
                         onValueChange = { newTableDescription = it },
-                        label = { Text("\u0627\u0644\u0648\u0635\u0641 (\u0627\u062e\u062a\u064a\u0627\u0631\u064a)") },
+                        label = { Text("الوصف (اختياري)") },
                         modifier = Modifier.fillMaxWidth(),
-                        maxLines = 3
+                        maxLines = 3,
+                        shape = MaterialTheme.shapes.small
                     )
                 }
             },
@@ -220,9 +206,9 @@ fun DashboardScreen(
                             }
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary)
                 ) {
-                    Text("\u0625\u0646\u0634\u0627\u0621")
+                    Text("إنشاء")
                 }
             },
             dismissButton = {
@@ -231,80 +217,95 @@ fun DashboardScreen(
                     newTableName = ""
                     newTableDescription = ""
                 }) {
-                    Text("\u0625\u0644\u063a\u0627\u0621", color = Gray600)
+                    Text("إلغاء", color = colors.onSurfaceVariant)
                 }
             }
         )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TableCard(
     table: Table,
     onClick: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp, pressedElevation = 6.dp)
     ) {
         Column {
-            if (table.houseCardImage != null) {
-                Image(
-                    painter = rememberAsyncImagePainter(model = table.houseCardImage),
-                    contentDescription = table.name,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(PrimaryLight.copy(alpha = 0.2f), Primary.copy(alpha = 0.1f))
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Image,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = Primary.copy(alpha = 0.5f)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 11f)
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .background(colors.surfaceContainerHigh)
+            ) {
+                if (table.houseCardImage != null) {
+                    Image(
+                        painter = rememberAsyncImagePainter(model = table.houseCardImage),
+                        contentDescription = table.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
                     )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(colors.primaryContainer, colors.primaryContainer.copy(alpha = 0.45f))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.HomeWork,
+                            contentDescription = null,
+                            modifier = Modifier.size(44.dp),
+                            tint = colors.onPrimaryContainer.copy(alpha = 0.55f)
+                        )
+                    }
                 }
             }
 
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                 Text(
                     text = table.name,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Gray800,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (table.description != null) {
                     Text(
                         text = table.description,
-                        fontSize = 12.sp,
-                        color = Gray500,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Text(
-                    text = try { table.createdAt.substring(0, 10) } catch (_: Exception) { table.createdAt },
-                    fontSize = 10.sp,
-                    color = Gray400
-                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.CalendarToday,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = colors.outline
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = try { table.createdAt.substring(0, 10) } catch (_: Exception) { table.createdAt },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.outline
+                    )
+                }
             }
         }
     }

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.AlKadadCompound" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">#A5B4FC</item>
+        <item name="android:colorPrimaryDark">#1A1850</item>
+        <item name="android:colorAccent">#5EEAD4</item>
+        <item name="android:statusBarColor">#1A1850</item>
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+</resources>

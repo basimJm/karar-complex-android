@@ -121,7 +121,7 @@ class TableRepository(private val context: Context) {
 
     suspend fun uploadTableImage(id: String, imageFile: File): Result<String> {
         return try {
-            val requestFile = imageFile.asRequestBody("image/*".toMediaTypeOrNull())
+            val requestFile = imageFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
             val imagePart = MultipartBody.Part.createFormData("houseCard", imageFile.name, requestFile)
             val response = api.uploadTableImage(id, imagePart)
             if (response.isSuccessful) {
@@ -199,7 +199,7 @@ class RowRepository(private val context: Context) {
     suspend fun uploadRowImages(tableId: String, rowId: String, imageFiles: List<File>): Result<List<Image>> {
         return try {
             val parts = imageFiles.map { file ->
-                val requestFile = file.asRequestBody("image/*".toMediaTypeOrNull())
+                val requestFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
                 MultipartBody.Part.createFormData("images", file.name, requestFile)
             }
             val response = api.uploadRowImages(tableId, rowId, parts)
