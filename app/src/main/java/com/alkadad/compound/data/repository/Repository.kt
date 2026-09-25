@@ -133,7 +133,7 @@ class TableRepository(private val context: Context) {
                     Result.failure(Exception("No image URL in response"))
                 }
             } else {
-                Result.failure(Exception("Failed to upload image"))
+                Result.failure(Exception("Failed to upload image: HTTP ${response.code()} ${response.errorBody()?.string().orEmpty().take(500)}"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -151,6 +151,19 @@ class RowRepository(private val context: Context) {
                 Result.success(response.body()!!.rows)
             } else {
                 Result.failure(Exception("Failed to get rows"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getRow(tableId: String, rowId: String): Result<Row> {
+        return try {
+            val response = api.getRow(tableId, rowId)
+            if (response.isSuccessful) {
+                Result.success(response.body()!!.row)
+            } else {
+                Result.failure(Exception("Failed to get row: HTTP ${response.code()}"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -206,7 +219,7 @@ class RowRepository(private val context: Context) {
             if (response.isSuccessful) {
                 Result.success(response.body()!!.images)
             } else {
-                Result.failure(Exception("Failed to upload images"))
+                Result.failure(Exception("Failed to upload images: HTTP ${response.code()} ${response.errorBody()?.string().orEmpty().take(500)}"))
             }
         } catch (e: Exception) {
             Result.failure(e)

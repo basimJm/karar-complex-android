@@ -6,7 +6,16 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalHapticFeedback
+import coil.request.ImageRequest
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -25,14 +34,11 @@ import coil.compose.rememberAsyncImagePainter
 import com.alkadad.compound.data.model.Table
 import com.alkadad.compound.data.repository.AuthRepository
 import com.alkadad.compound.data.repository.TableRepository
-import com.alkadad.compound.ui.components.BrandMark
-import com.alkadad.compound.ui.components.DialogIcon
-import com.alkadad.compound.ui.components.EmptyState
-import com.alkadad.compound.ui.components.LoadingState
+import com.alkadad.compound.ui.components.*
 import com.alkadad.compound.ui.theme.*
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(
     onTableClick: (String) -> Unit,
@@ -62,17 +68,28 @@ fun DashboardScreen(
         loadTables()
     }
 
+    var userName by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        authRepository.getMe().onSuccess { userName = it.name }
+    }
+
     val colors = MaterialTheme.colorScheme
     val header = LocalHeaderColors.current
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val gridState = rememberLazyGridState()
+    val fabExpanded by remember { derivedStateOf { gridState.firstVisibleItemIndex == 0 } }
+    val fabInteraction = remember { MutableInteractionSource() }
+    val haptics = LocalHapticFeedback.current
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = colors.background,
         topBar = {
             TopAppBar(
                 modifier = Modifier.headerBackground(),
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        BrandMark(size = 40.dp)
+                        BrandMark(size = 40.dp, modifier = Modifier.enterAnimation(offsetY = 0.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
@@ -99,12 +116,19 @@ fun DashboardScreen(
                         Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "تسجيل الخروج")
                     }
                 },
-                colors = headerTopAppBarColors()
+                colors = headerTopAppBarColors(),
+                scrollBehavior = scrollBehavior
             )
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { showCreateDialog = true },
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    showCreateDialog = true
+                },
+                expanded = fabExpanded,
+                interactionSource = fabInteraction,
+                modifier = Modifier.enterAnimation(index = 4, offsetY = 48.dp).pressScale(fabInteraction, 0.92f),
                 containerColor = colors.secondary,
                 contentColor = colors.onSecondary,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -112,51 +136,77 @@ fun DashboardScreen(
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
-            LoadingState(modifier = Modifier.padding(paddingValues))
-        } else if (tables.isEmpty()) {
-            EmptyState(
-                icon = Icons.Default.GridView,
-                title = "لا توجد جداول",
-                subtitle = "اضغط + لإنشاء أول جدول",
-                modifier = Modifier.padding(paddingValues)
-            )
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 160.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "الجداول",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = colors.onBackground,
-                            modifier = Modifier.weight(1f)
+        val screenState = when {
+            isLoading -> "loading"
+            tables.isEmpty() -> "empty"
+            else -> "content"
+        }
+        Crossfade(
+            targetState = screenState,
+            animationSpec = tween(AppMotion.Medium),
+            label = "dashboardState",
+            modifier = Modifier.padding(paddingValues)
+        ) { state ->
+            when (state) {
+                "loading" -> LoadingState()
+                "empty" -> EmptyState(
+                    icon = Icons.Default.GridView,
+                    title = "\u0644\u0627 \u062a\u0648\u062c\u062f \u062c\u062f\u0627\u0648\u0644",
+                    subtitle = "\u0627\u0636\u063a\u0637 + \u0644\u0625\u0646\u0634\u0627\u0621 \u0623\u0648\u0644 \u062c\u062f\u0648\u0644"
+                )
+                else -> LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Adaptive(minSize = 160.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "welcome") {
+                        WelcomeCard(
+                            userName = userName,
+                            tableCount = tables.size,
+                            modifier = Modifier.enterAnimation(index = 0)
                         )
-                        Surface(color = colors.primaryContainer, shape = RoundedCornerShape(50)) {
+                    }
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "section") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp).enterAnimation(index = 1),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = "${tables.size}",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = colors.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                text = "\u0627\u0644\u062c\u062f\u0627\u0648\u0644",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = colors.onBackground,
+                                modifier = Modifier.weight(1f)
                             )
+                            AnimatedContent(
+                                targetState = tables.size,
+                                transitionSpec = {
+                                    (slideInVertically { it } + fadeIn()).togetherWith(slideOutVertically { -it } + fadeOut())
+                                },
+                                label = "tableCountBadge"
+                            ) { count ->
+                                Surface(color = colors.primaryContainer, shape = RoundedCornerShape(50)) {
+                                    Text(
+                                        text = "$count",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = colors.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
                         }
                     }
-                }
-                items(tables) { table ->
-                    TableCard(
-                        table = table,
-                        onClick = { onTableClick(table.id) }
-                    )
+                    itemsIndexed(tables, key = { _, table -> table.id }) { index, table ->
+                        TableCard(
+                            table = table,
+                            onClick = { onTableClick(table.id) },
+                            modifier = Modifier
+                                .animateItemPlacement(tween(AppMotion.Medium, easing = AppMotion.Emphasized))
+                                .enterAnimation(index = index + 2)
+                        )
+                    }
                 }
             }
         }
@@ -173,7 +223,7 @@ fun DashboardScreen(
                         value = newTableName,
                         onValueChange = { newTableName = it },
                         label = { Text("اسم الجدول") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().focusLift(),
                         singleLine = true,
                         shape = MaterialTheme.shapes.small
                     )
@@ -182,7 +232,7 @@ fun DashboardScreen(
                         value = newTableDescription,
                         onValueChange = { newTableDescription = it },
                         label = { Text("الوصف (اختياري)") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().focusLift(),
                         maxLines = 3,
                         shape = MaterialTheme.shapes.small
                     )
@@ -228,12 +278,15 @@ fun DashboardScreen(
 @Composable
 fun TableCard(
     table: Table,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        interactionSource = interaction,
+        modifier = modifier.fillMaxWidth().pressScale(interaction),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLowest),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp, pressedElevation = 6.dp)
@@ -248,7 +301,12 @@ fun TableCard(
             ) {
                 if (table.houseCardImage != null) {
                     Image(
-                        painter = rememberAsyncImagePainter(model = table.houseCardImage),
+                        painter = rememberAsyncImagePainter(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(table.houseCardImage)
+                                .crossfade(AppMotion.Long)
+                                .build()
+                        ),
                         contentDescription = table.name,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop

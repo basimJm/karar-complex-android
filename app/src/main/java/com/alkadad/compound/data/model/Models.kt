@@ -1,5 +1,6 @@
 package com.alkadad.compound.data.model
 
+import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 
 data class User(
@@ -79,6 +80,11 @@ data class RowResponse(
     val rows: List<Row>
 )
 
+data class RowDetailResponse(
+    val success: Boolean,
+    val row: Row
+)
+
 data class CreateRowRequest(
     val name: String,
     val data: Map<String, String>
@@ -87,13 +93,15 @@ data class CreateRowRequest(
 data class ImageUploadResponse(
     val success: Boolean,
     val images: List<Image>,
-    val row: Row
+    // Backend returns this row unpopulated (createdBy is an id string), so keep it untyped.
+    val row: JsonElement?
 )
 
 data class HouseCardUploadResponse(
     val success: Boolean,
     @SerializedName("imageUrl") val imageUrl: String?,
-    val table: Table?
+    // Backend returns this table unpopulated (createdBy is an id string), so keep it untyped.
+    val table: JsonElement?
 )
 
 data class ErrorResponse(

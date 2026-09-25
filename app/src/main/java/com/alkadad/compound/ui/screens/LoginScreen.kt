@@ -1,6 +1,9 @@
 package com.alkadad.compound.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -32,7 +35,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.alkadad.compound.data.repository.AuthRepository
-import com.alkadad.compound.ui.components.BrandMark
+import com.alkadad.compound.ui.components.*
 import com.alkadad.compound.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -56,6 +59,24 @@ fun LoginScreen(
     val header = LocalHeaderColors.current
     val colors = MaterialTheme.colorScheme
 
+    // AppMotion
+    val shakeController = rememberShakeController()
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) shakeController.shake()
+    }
+    val logoScale = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        logoScale.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessLow))
+    }
+    val ambient = rememberInfiniteTransition(label = "loginAmbient")
+    val drift by ambient.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(9000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "drift"
+    )
+    val buttonInteraction = remember { MutableInteractionSource() }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -68,8 +89,8 @@ fun LoginScreen(
     ) {
         // Soft decorative circles
         Canvas(modifier = Modifier.fillMaxSize()) {
-            drawCircle(Color.White.copy(alpha = 0.06f), radius = size.width * 0.55f, center = Offset(size.width * 0.95f, size.height * 0.05f))
-            drawCircle(Mint400.copy(alpha = 0.14f), radius = size.width * 0.35f, center = Offset(size.width * 0.02f, size.height * 0.30f))
+            drawCircle(Color.White.copy(alpha = 0.06f), radius = size.width * (0.52f + 0.06f * drift), center = Offset(size.width * (0.95f - 0.08f * drift), size.height * (0.05f + 0.03f * drift)))
+            drawCircle(Mint400.copy(alpha = 0.14f), radius = size.width * (0.35f - 0.04f * drift), center = Offset(size.width * (0.02f + 0.10f * drift), size.height * (0.30f - 0.04f * drift)))
         }
 
         BoxWithConstraints(
@@ -88,7 +109,16 @@ fun LoginScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 // Logo
-                BrandMark(size = 96.dp)
+                BrandMark(
+                    size = 96.dp,
+                    modifier = Modifier
+                        .floating(amplitude = 5.dp, durationMs = 2600)
+                        .graphicsLayer {
+                            scaleX = logoScale.value
+                            scaleY = logoScale.value
+                            rotationZ = (1f - logoScale.value) * -90f
+                        }
+                )
 
                 Spacer(modifier = Modifier.height(20.dp))
 
@@ -97,20 +127,26 @@ fun LoginScreen(
                     text = "مجمعات النداء السكنية",
                     style = MaterialTheme.typography.headlineMedium,
                     color = header.content,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.enterAnimation(index = 2)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "نظام إدارة الجداول",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = header.content.copy(alpha = 0.8f)
+                    color = header.content.copy(alpha = 0.8f),
+                    modifier = Modifier.enterAnimation(index = 3)
                 )
 
                 Spacer(modifier = Modifier.height(36.dp))
 
                 // Login Card
                 Card(
-                    modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(),
+                    modifier = Modifier
+                        .widthIn(max = 480.dp)
+                        .fillMaxWidth()
+                        .enterAnimation(index = 4, offsetY = 64.dp)
+                        .shake(shakeController),
                     shape = MaterialTheme.shapes.extraLarge,
                     colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLowest),
                     elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -121,6 +157,7 @@ fun LoginScreen(
                     ) {
                         Text(
                             text = "تسجيل الدخول",
+                            modifier = Modifier.enterAnimation(index = 5),
                             style = MaterialTheme.typography.titleLarge,
                             color = colors.onSurface
                         )
@@ -141,7 +178,7 @@ fun LoginScreen(
                             leadingIcon = {
                                 Icon(Icons.Default.Email, contentDescription = null)
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().enterAnimation(index = 6).focusLift(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                             singleLine = true,
                             shape = MaterialTheme.shapes.medium
@@ -159,13 +196,15 @@ fun LoginScreen(
                             },
                             trailingIcon = {
                                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                    Icon(
-                                        if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (passwordVisible) "إخفاء كلمة المرور" else "إظهار كلمة المرور"
-                                    )
+                                    Crossfade(targetState = passwordVisible, animationSpec = tween(AppMotion.Short), label = "passwordIcon") { visible ->
+                                        Icon(
+                                            if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = if (visible) "إخفاء كلمة المرور" else "إظهار كلمة المرور"
+                                        )
+                                    }
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().enterAnimation(index = 7).focusLift(),
                             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
@@ -219,7 +258,10 @@ fun LoginScreen(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(56.dp),
+                                .height(56.dp)
+                                .enterAnimation(index = 8)
+                                .pressScale(buttonInteraction),
+                            interactionSource = buttonInteraction,
                             shape = MaterialTheme.shapes.medium,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = colors.primary,
@@ -227,20 +269,31 @@ fun LoginScreen(
                             ),
                             enabled = !isLoading && email.isNotBlank() && password.isNotBlank()
                         ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    color = colors.primary,
-                                    strokeWidth = 2.5.dp
-                                )
-                            } else {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.Login,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text("تسجيل الدخول", style = MaterialTheme.typography.titleMedium)
+                            AnimatedContent(
+                                targetState = isLoading,
+                                transitionSpec = {
+                                    (fadeIn(tween(AppMotion.Medium)) + scaleIn(initialScale = 0.7f, animationSpec = tween(AppMotion.Medium)))
+                                        .togetherWith(fadeOut(tween(AppMotion.Short)) + scaleOut(targetScale = 0.7f, animationSpec = tween(AppMotion.Short)))
+                                },
+                                label = "loginButtonContent"
+                            ) { loading ->
+                                if (loading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp),
+                                        color = colors.primary,
+                                        strokeWidth = 2.5.dp
+                                    )
+                                } else {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.Login,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text("تسجيل الدخول", style = MaterialTheme.typography.titleMedium)
+                                    }
+                                }
                             }
                         }
                     }
@@ -249,6 +302,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Surface(
+                    modifier = Modifier.enterAnimation(index = 9),
                     color = colors.surfaceContainerHigh.copy(alpha = 0.7f),
                     shape = RoundedCornerShape(50)
                 ) {

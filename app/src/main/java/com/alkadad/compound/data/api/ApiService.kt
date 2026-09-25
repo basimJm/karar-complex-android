@@ -43,6 +43,12 @@ interface ApiService {
         @Query("search") search: String? = null
     ): Response<RowResponse>
 
+    @GET("tables/{tableId}/rows/{rowId}")
+    suspend fun getRow(
+        @Path("tableId") tableId: String,
+        @Path("rowId") rowId: String
+    ): Response<RowDetailResponse>
+
     @POST("tables/{tableId}/rows")
     suspend fun createRow(
         @Path("tableId") tableId: String,

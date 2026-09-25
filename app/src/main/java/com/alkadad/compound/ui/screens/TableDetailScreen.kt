@@ -3,6 +3,7 @@ package com.alkadad.compound.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -14,6 +15,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalHapticFeedback
+import coil.request.ImageRequest
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -44,10 +53,7 @@ import com.alkadad.compound.data.image.ImageCompressor
 import com.alkadad.compound.data.model.*
 import com.alkadad.compound.data.repository.RowRepository
 import com.alkadad.compound.data.repository.TableRepository
-import com.alkadad.compound.ui.components.DialogIcon
-import com.alkadad.compound.ui.components.EmptyState
-import com.alkadad.compound.ui.components.InfoTile
-import com.alkadad.compound.ui.components.LoadingState
+import com.alkadad.compound.ui.components.*
 import com.alkadad.compound.ui.theme.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -60,7 +66,8 @@ private const val DEBOUNCE_MS = 1000L
 @Composable
 fun TableDetailScreen(
     tableId: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenRow: (String) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -85,8 +92,6 @@ fun TableDetailScreen(
     var showDeleteImageDialog by remember { mutableStateOf(false) }
     var pendingDeleteImageIndex by remember { mutableStateOf(0) }
     var pendingDeleteRowId by remember { mutableStateOf("") }
-    var showDetailDialog by remember { mutableStateOf(false) }
-    var selectedRow by remember { mutableStateOf<Row?>(null) }
     var showImageViewer by remember { mutableStateOf(false) }
     var viewerImages by remember { mutableStateOf<List<Image>>(emptyList()) }
     var viewerInitialPage by remember { mutableStateOf(0) }
@@ -122,12 +127,13 @@ fun TableDetailScreen(
                 false
             } else {
                 val result = if (targetRowId != null) {
-                    rowRepository.uploadRowImages(tableId, targetRowId, listOf(file)).isSuccess
+                    rowRepository.uploadRowImages(tableId, targetRowId, listOf(file)).map { }
                 } else {
-                    tableRepository.uploadTableImage(tableId, file).isSuccess
+                    tableRepository.uploadTableImage(tableId, file).map { }
                 }
+                result.onFailure { Log.w("TableDetailScreen", "Image upload failed", it) }
                 file.delete()
-                result
+                result.isSuccess
             }
             context.cacheDir.listFiles { f -> f.name.startsWith("camera_") }?.forEach { it.delete() }
             isUploading = false
@@ -186,8 +192,14 @@ fun TableDetailScreen(
 
     val colors = MaterialTheme.colorScheme
     val header = LocalHeaderColors.current
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val listState = rememberLazyListState()
+    val fabExpanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+    val fabInteraction = remember { MutableInteractionSource() }
+    val haptics = LocalHapticFeedback.current
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = colors.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -201,12 +213,20 @@ fun TableDetailScreen(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (table != null) {
-                            Text(
-                                text = "${rows.size} صف",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = header.content.copy(alpha = 0.75f)
-                            )
+                        AnimatedVisibility(visible = table != null, enter = fadeIn() + expandVertically()) {
+                            AnimatedContent(
+                                targetState = rows.size,
+                                transitionSpec = {
+                                    (slideInVertically { it } + fadeIn()).togetherWith(slideOutVertically { -it } + fadeOut())
+                                },
+                                label = "rowCount"
+                            ) { count ->
+                                Text(
+                                    text = "$count صف",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = header.content.copy(alpha = 0.75f)
+                                )
+                            }
                         }
                     }
                 },
@@ -225,12 +245,19 @@ fun TableDetailScreen(
                         galleryLauncher.launch("image/*")
                     }) { Icon(Icons.Default.PhotoLibrary, contentDescription = "اختيار صورة من المحفظة") }
                 },
-                colors = headerTopAppBarColors()
+                colors = headerTopAppBarColors(),
+                scrollBehavior = scrollBehavior
             )
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { editingRow = null; rowFormData = emptyMap(); rowName = ""; showRowDialog = true },
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    editingRow = null; rowFormData = emptyMap(); rowName = ""; showRowDialog = true
+                },
+                expanded = fabExpanded,
+                interactionSource = fabInteraction,
+                modifier = Modifier.enterAnimation(index = 3, offsetY = 48.dp).pressScale(fabInteraction, 0.92f),
                 containerColor = colors.secondary,
                 contentColor = colors.onSecondary,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -242,11 +269,19 @@ fun TableDetailScreen(
             TextField(
                 value = searchInput,
                 onValueChange = { searchInput = it },
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
+                    .enterAnimation(index = 0)
+                    .focusLift(),
                 placeholder = { Text("بحث بالاسم...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
-                    if (searchInput.isNotEmpty()) {
+                    AnimatedVisibility(
+                        visible = searchInput.isNotEmpty(),
+                        enter = fadeIn(tween(AppMotion.Short)) + scaleIn(initialScale = 0.5f),
+                        exit = fadeOut(tween(AppMotion.Short)) + scaleOut(targetScale = 0.5f)
+                    ) {
                         IconButton(onClick = { searchInput = "" }) {
                             Icon(Icons.Default.Clear, contentDescription = "مسح البحث")
                         }
@@ -255,7 +290,7 @@ fun TableDetailScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(50),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = colors.surfaceContainerHigh,
+                    focusedContainerColor = colors.surfaceContainerHighest,
                     unfocusedContainerColor = colors.surfaceContainerHigh,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
@@ -265,7 +300,11 @@ fun TableDetailScreen(
                 )
             )
 
-            if (isUploading) {
+            AnimatedVisibility(
+                visible = isUploading,
+                enter = fadeIn(tween(AppMotion.Medium)) + expandVertically(tween(AppMotion.Medium, easing = AppMotion.Emphasized)),
+                exit = fadeOut(tween(AppMotion.Short)) + shrinkVertically(tween(AppMotion.Medium, easing = AppMotion.Emphasized))
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                     color = colors.primaryContainer,
@@ -285,7 +324,12 @@ fun TableDetailScreen(
                         )
                     }
                 }
-            } else if (isLoading && rows.isNotEmpty()) {
+            }
+            AnimatedVisibility(
+                visible = !isUploading && isLoading && rows.isNotEmpty(),
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clip(RoundedCornerShape(50)),
                     color = colors.primary,
@@ -293,9 +337,15 @@ fun TableDetailScreen(
                 )
             }
 
-            if (isLoading && rows.isEmpty()) {
+            val listContentState = when {
+                isLoading && rows.isEmpty() -> "loading"
+                rows.isEmpty() -> "empty"
+                else -> "content"
+            }
+            Crossfade(targetState = listContentState, animationSpec = tween(AppMotion.Medium), label = "rowsState") { state ->
+            if (state == "loading") {
                 LoadingState()
-            } else if (rows.isEmpty()) {
+            } else if (state == "empty") {
                 EmptyState(
                     icon = Icons.Default.TableRows,
                     title = "لا توجد صفوف",
@@ -303,14 +353,18 @@ fun TableDetailScreen(
                 )
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    itemsIndexed(rows) { _, row ->
+                    itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
                         RowCard(
+                            modifier = Modifier
+                                .animateItemPlacement(tween(AppMotion.Medium, easing = AppMotion.Emphasized))
+                                .enterAnimation(index = index + 1),
                             row = row, table = table,
-                            onRowClick = { selectedRow = row; showDetailDialog = true },
+                            onRowClick = { onOpenRow(row.id) },
                             onEdit = { editingRow = row; rowName = row.name; rowFormData = row.data ?: emptyMap(); showRowDialog = true },
                             onDelete = { scope.launch { rowRepository.deleteRow(tableId, row.id); refreshTable() } },
                             onAddImages = { if (!isUploading) { uploadRowId = row.id; showImageSourceDialog = true } },
@@ -327,6 +381,7 @@ fun TableDetailScreen(
                         )
                     }
                 }
+            }
             }
         }
     }
@@ -347,7 +402,7 @@ fun TableDetailScreen(
                         value = rowName,
                         onValueChange = { rowName = it },
                         label = { Text("اسم الصف *") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().focusLift(),
                         singleLine = true,
                         shape = MaterialTheme.shapes.small
                     )
@@ -357,7 +412,7 @@ fun TableDetailScreen(
                             value = rowFormData[column.key] ?: "",
                             onValueChange = { rowFormData = rowFormData.toMutableMap().apply { put(column.key, it) } },
                             label = { Text(column.label) },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().focusLift(),
                             singleLine = true,
                             shape = MaterialTheme.shapes.small
                         )
@@ -410,75 +465,6 @@ fun TableDetailScreen(
         )
     }
 
-    // Row Detail Dialog
-    if (showDetailDialog && selectedRow != null) {
-        AlertDialog(
-            onDismissRequest = { showDetailDialog = false; selectedRow = null },
-            icon = { DialogIcon(Icons.Default.Description, colors.primaryContainer, colors.onPrimaryContainer) },
-            title = {
-                Text("تفاصيل الصف", style = MaterialTheme.typography.titleLarge)
-            },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    InfoTile(label = "اسم الجدول", value = table?.name ?: "", emphasized = true)
-                    InfoTile(label = "اسم الصف", value = selectedRow!!.name.ifBlank { "صف جديد" })
-
-                    table?.columns?.forEach { column ->
-                        val value = selectedRow!!.data?.get(column.key)
-                        InfoTile(label = column.label, value = value ?: "-")
-                    }
-
-                    selectedRow?.images?.let { images ->
-                        if (images.isNotEmpty()) {
-                            Text(
-                                "الصور (${images.size})",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = colors.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
-                            images.forEachIndexed { idx, img ->
-                                Image(
-                                    painter = rememberAsyncImagePainter(model = img.url),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(200.dp)
-                                        .clip(MaterialTheme.shapes.small)
-                                        .background(colors.surfaceContainerHigh),
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDetailDialog = false
-                        editingRow = selectedRow
-                        rowName = selectedRow!!.name
-                        rowFormData = selectedRow!!.data ?: emptyMap()
-                        showRowDialog = true
-                        selectedRow = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary)
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("تعديل")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDetailDialog = false; selectedRow = null }) {
-                    Text("إغلاق", color = colors.onSurfaceVariant)
-                }
-            }
-        )
-    }
     // Image Source Chooser
     if (showImageSourceDialog) {
         AlertDialog(
@@ -532,7 +518,7 @@ fun TableDetailScreen(
                 HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Image(
-                            painter = rememberAsyncImagePainter(model = viewerImages[page].url),
+                            painter = rememberAsyncImagePainter(model = crossfadeRequest(viewerImages[page].url)),
                             contentDescription = null,
                             modifier = Modifier
                                 .fillMaxSize()
@@ -559,17 +545,23 @@ fun TableDetailScreen(
                 ) {
                     Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = Color.White)
                 }
+                AnimatedContent(
+                    targetState = pagerState.currentPage,
+                    transitionSpec = { (fadeIn(tween(AppMotion.Short)) + scaleIn(initialScale = 0.8f)).togetherWith(fadeOut(tween(AppMotion.Short))) },
+                    label = "viewerCounter",
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                ) { page ->
                 Text(
-                    text = "${pagerState.currentPage + 1} / ${viewerImages.size}",
+                    text = "${page + 1} / ${viewerImages.size}",
                     color = Color.White,
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
                         .padding(24.dp)
                         .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
                         .padding(horizontal = 18.dp, vertical = 8.dp)
                 )
+                }
             }
         }
     }
@@ -583,9 +575,11 @@ private fun ImageSourceOption(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val interaction = remember { MutableInteractionSource() }
     Surface(
         onClick = onClick,
-        modifier = modifier,
+        interactionSource = interaction,
+        modifier = modifier.pressScale(interaction, 0.94f),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
@@ -609,6 +603,7 @@ private fun ImageSourceOption(
 @Composable
 fun RowCard(
     row: Row, table: Table?,
+    modifier: Modifier = Modifier,
     onRowClick: () -> Unit,
     onEdit: () -> Unit, onDelete: () -> Unit, onAddImages: () -> Unit, onDeleteImage: (Int) -> Unit,
     onImageClick: (List<Image>, Int) -> Unit
@@ -617,9 +612,11 @@ fun RowCard(
     val colors = MaterialTheme.colorScheme
     val displayName = row.name.ifBlank { "صف جديد" }
 
+    val interaction = remember { MutableInteractionSource() }
     Card(
         onClick = onRowClick,
-        modifier = Modifier.fillMaxWidth(),
+        interactionSource = interaction,
+        modifier = modifier.fillMaxWidth().pressScale(interaction, 0.97f).animateContentSize(tween(AppMotion.Medium, easing = AppMotion.Emphasized)),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLowest),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 4.dp)
@@ -699,8 +696,9 @@ fun RowCard(
                 Row(modifier = Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     row.images.take(3).forEachIndexed { idx, img ->
                         Image(
-                            painter = rememberAsyncImagePainter(model = img.url), contentDescription = null,
+                            painter = rememberAsyncImagePainter(model = crossfadeRequest(img.url)), contentDescription = null,
                             modifier = Modifier
+                                .enterAnimation(index = idx, offsetY = 12.dp)
                                 .size(72.dp)
                                 .clip(MaterialTheme.shapes.small)
                                 .background(colors.surfaceContainerHigh)
@@ -746,3 +744,10 @@ fun RowCard(
         )
     }
 }
+
+@Composable
+private fun crossfadeRequest(url: String?): ImageRequest =
+    ImageRequest.Builder(LocalContext.current)
+        .data(url)
+        .crossfade(AppMotion.Long)
+        .build()

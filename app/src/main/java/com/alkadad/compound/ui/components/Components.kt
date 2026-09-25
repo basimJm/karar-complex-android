@@ -5,7 +5,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,9 +64,10 @@ fun EmptyState(
     action: (@Composable () -> Unit)? = null,
 ) {
     Box(modifier = modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.enterAnimation()) {
             Box(
                 modifier = Modifier
+                    .floating()
                     .size(112.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
@@ -122,8 +129,14 @@ fun InfoTile(
 /** Circular icon badge used in dialog headers. */
 @Composable
 fun DialogIcon(icon: ImageVector, container: Color, content: Color) {
+    val pop = remember { Animatable(0.4f) }
+    LaunchedEffect(Unit) {
+        pop.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMediumLow))
+    }
     Box(
-        modifier = Modifier.size(52.dp).clip(CircleShape).background(container),
+        modifier = Modifier
+            .graphicsLayer { scaleX = pop.value; scaleY = pop.value; rotationZ = (1f - pop.value) * -25f }
+            .size(52.dp).clip(CircleShape).background(container),
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(26.dp))
