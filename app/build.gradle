@@ -58,42 +58,37 @@ android {
 }
 
 // 16KB page size alignment for Google Play compliance
+// Order: package (unsigned) -> zipalign (16KB) -> apksigner (sign last)
 def buildToolsDir = android.sdkDirectory.getAbsolutePath() + "/build-tools/"
-task alignTo16KB {
-    dependsOn 'assembleRelease'
-    doLast {
-        def btDir = file(buildToolsDir)
-        def tools = btDir.listFiles().findAll { it.isDirectory() }.sort { it.name }.last()
-        def zipalign = new File(tools, "zipalign")
-        def apks = file("${buildDir}/outputs/apk/release").listFiles()?.findAll { it.name.endsWith(".apk") }
-        apks?.each { apk ->
-            def aligned = new File(apk.parent, apk.name.replace(".apk", "-16kb.apk"))
-            exec {
-                commandLine zipalign.absolutePath, "-f", "-P", "16", "4096", apk.absolutePath, aligned.absolutePath
-            }
-            apk.delete()
-            aligned.renameTo(apk)
-            println "Aligned: ${apk.name}"
-        }
-    }
+def latestBuildTools = {
+    def btDir = file(buildToolsDir)
+    return btDir.listFiles().findAll { it.isDirectory() }.sort { it.name }.last()
 }
 
-tasks.configureEach { task ->
-    if (task.name == 'assembleDebug' || task.name == 'assembleRelease') {
-        task.doLast {
-            def suffix = task.name == 'assembleDebug' ? 'debug' : 'release'
-            def btDir = file(buildToolsDir)
-            def tools = btDir.listFiles().findAll { it.isDirectory() }.sort { it.name }.last()
+afterEvaluate {
+    // Sign the already-16KB-aligned release APK
+    tasks.matching { it.name == 'packageRelease' }.configureEach {
+        doLast {
+            def tools = latestBuildTools()
             def zipalign = new File(tools, "zipalign")
-            def apks = file("${buildDir}/outputs/apk/${suffix}").listFiles()?.findAll { it.name.endsWith(".apk") }
+            def apksigner = new File(tools, "apksigner")
+            def apks = file("${buildDir}/outputs/apk/release").listFiles()?.findAll { it.name.endsWith(".apk") && !it.name.contains("-unsigned") }
             apks?.each { apk ->
-                def aligned = new File(apk.parent, apk.name.replace(".apk", "-16kb.apk"))
+                def aligned = new File(apk.parent, apk.name.replace(".apk", "-aligned.apk"))
                 exec {
                     commandLine zipalign.absolutePath, "-f", "-P", "16", "4096", apk.absolutePath, aligned.absolutePath
                 }
-                apk.delete()
-                aligned.renameTo(apk)
-                println "16KB Aligned: ${apk.name}"
+                exec {
+                    commandLine apksigner.absolutePath, "sign",
+                        "--ks", file("release-key.jks").absolutePath,
+                        "--ks-pass", "pass:alkadad123",
+                        "--ks-key-alias", "alkadad",
+                        "--key-pass", "pass:alkadad123",
+                        "--out", apk.absolutePath,
+                        aligned.absolutePath
+                }
+                aligned.delete()
+                println "16KB Aligned + Signed: ${apk.name}"
             }
         }
     }
